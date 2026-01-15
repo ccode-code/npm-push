@@ -16,7 +16,7 @@ async function buildProject() {
     entrypoints: ["./src/cli.ts"],
     outdir: "./dist",
     target: "node", // 目标平台为 Node.js
-    format: "esm", // 使用 ES 模块格式
+    format: "cjs", // 使用 cjs 模块格式
     external: [
       "prompts",
       "chalk",
