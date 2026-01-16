@@ -49,6 +49,12 @@ describe("Workspace 工具函数", () => {
       expect(workspaceInfo.packages[0].name).toBe("test-package");
       expect(workspaceInfo.packages[0].version).toBe("1.0.0");
     });
+
+    test("没有 package.json 应该抛出错误", () => {
+      expect(() => getWorkspaceInfo(join(TEST_DIR, "nonexistent"))).toThrow(
+        "未找到 package.json"
+      );
+    });
   });
 
   describe("getWorkspaceInfo - Monorepo 项目", () => {
@@ -169,7 +175,9 @@ describe("Workspace 工具函数", () => {
       );
 
       const workspaceInfo = getWorkspaceInfo(TEST_DIR);
-      const found = findPackageByPath(workspaceInfo, "/nonexistent/path");
+      // 使用跨平台路径，避免硬编码 Unix 路径（/nonexistent/path 在 Windows 上无效）
+      const nonexistentPath = join(process.cwd(), "nonexistent", "path");
+      const found = findPackageByPath(workspaceInfo, nonexistentPath);
 
       expect(found).toBeUndefined();
     });

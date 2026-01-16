@@ -1,7 +1,9 @@
 /**
  * Scripts 工具函数测试
+ * 支持跨平台（Windows、macOS、Linux）
  */
 import { describe, test, expect } from "bun:test";
+import { join } from "path";
 import { getPackageScripts } from "./scripts";
 import type { PackageInfo } from "../types";
 
@@ -11,7 +13,7 @@ describe("Scripts 工具函数", () => {
       const packageInfo: PackageInfo = {
         name: "test-package",
         version: "1.0.0",
-        path: "/test",
+        path: join(process.cwd(), "test"),
         packageJson: {
           name: "test-package",
           version: "1.0.0",
@@ -35,7 +37,7 @@ describe("Scripts 工具函数", () => {
       const packageInfo: PackageInfo = {
         name: "test-package",
         version: "1.0.0",
-        path: "/test",
+        path: join(process.cwd(), "test"),
         packageJson: {
           name: "test-package",
           version: "1.0.0",
@@ -52,7 +54,7 @@ describe("Scripts 工具函数", () => {
       const packageInfo: PackageInfo = {
         name: "test-package",
         version: "1.0.0",
-        path: "/test",
+        path: join(process.cwd(), "test"),
         packageJson: {
           name: "test-package",
           version: "1.0.0",

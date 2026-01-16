@@ -57,7 +57,13 @@ jobs:
         run: bun run --bun tsc --noEmit
       
       # 清理测试临时目录（如果存在）
-      - name: Cleanup test directories
-        if: always()
+      # 跨平台兼容的清理命令
+      - name: Cleanup test directories (Unix)
+        if: always() && runner.os != 'Windows'
+        run: rm -rf .test-tmp* || true
+      
+      - name: Cleanup test directories (Windows)
+        if: always() && runner.os == 'Windows'
         run: |
-          rm -rf .test-tmp* || true
+          if exist .test-tmp* rmdir /s /q .test-tmp*
+          exit 0
