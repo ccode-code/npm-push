@@ -1,8 +1,9 @@
 /**
- * npm 发布逻辑
+ * npm 发布逻辑（Bun 版本）
  */
 import { writeFileSync, readFileSync, existsSync, unlinkSync } from "fs";
 import { join } from "path";
+import ora from "ora";
 import type { PublishConfig } from "./types";
 import { updateChangelog, readChangelog } from "./utils/changelog";
 import { t } from "./i18n";
@@ -62,10 +63,68 @@ function restoreChangelog(packagePath: string, oldContent: string): void {
 }
 
 /**
+ * 创建 git commit
+ */
+async function createGitCommit(packagePath: string, version: string, changelog: string): Promise<void> {
+  // 构建 commit 消息
+  const commitMessage = `chore: release ${version}\n\n${changelog.split('\n').map(line => line.trim()).filter(line => line).join('\n')}`;
+  
+  const proc = Bun.spawn(["git", "commit", "-a", "-m", commitMessage], {
+    cwd: packagePath,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const exitCode = await proc.exited;
+  
+  if (exitCode !== 0) {
+    const stderr = await new Response(proc.stderr).text();
+    // 如果没有变更，git commit 会失败，这是正常的
+    if (stderr.includes("nothing to commit") || stderr.includes("no changes added to commit")) {
+      return;
+    }
+    throw new Error(t("git.commitFailed", { exitCode, error: stderr.trim() }));
+  }
+}
+
+/**
+ * 推送代码到远程仓库（带超时）
+ */
+async function pushGitCode(packagePath: string, timeout: number = 10000): Promise<void> {
+  const proc = Bun.spawn(["git", "push", "origin"], {
+    cwd: packagePath,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  // 设置超时
+  const timeoutId = setTimeout(() => {
+    proc.kill();
+  }, timeout);
+
+  try {
+    const exitCode = await proc.exited;
+    clearTimeout(timeoutId);
+    
+    if (exitCode !== 0) {
+      const stderr = await new Response(proc.stderr).text();
+      throw new Error(t("git.pushCodeFailed", { exitCode, error: stderr.trim() }));
+    }
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.message.includes("killed")) {
+      throw new Error(t("git.pushCodeTimeout", { timeout: timeout / 1000 }));
+    }
+    throw error;
+  }
+}
+
+/**
  * 创建 git tag
  */
-async function createGitTag(tag: string): Promise<void> {
+async function createGitTag(tag: string, packagePath: string): Promise<void> {
   const proc = Bun.spawn(["git", "tag", tag], {
+    cwd: packagePath,
     stdout: "inherit",
     stderr: "inherit",
   });
@@ -79,8 +138,9 @@ async function createGitTag(tag: string): Promise<void> {
 /**
  * 删除 git tag（用于回滚）
  */
-async function deleteGitTag(tag: string): Promise<void> {
+async function deleteGitTag(tag: string, packagePath: string): Promise<void> {
   const proc = Bun.spawn(["git", "tag", "-d", tag], {
+    cwd: packagePath,
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -90,17 +150,34 @@ async function deleteGitTag(tag: string): Promise<void> {
 }
 
 /**
- * 推送 git tag
+ * 推送 git tag（带超时）
  */
-async function pushGitTag(tag: string): Promise<void> {
+async function pushGitTag(tag: string, packagePath: string, timeout: number = 10000): Promise<void> {
   const proc = Bun.spawn(["git", "push", "origin", tag], {
-    stdout: "inherit",
-    stderr: "inherit",
+    cwd: packagePath,
+    stdout: "pipe",
+    stderr: "pipe",
   });
 
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) {
-    throw new Error(t("git.pushTagFailed", { exitCode }));
+  // 设置超时
+  const timeoutId = setTimeout(() => {
+    proc.kill();
+  }, timeout);
+
+  try {
+    const exitCode = await proc.exited;
+    clearTimeout(timeoutId);
+    
+    if (exitCode !== 0) {
+      const stderr = await new Response(proc.stderr).text();
+      throw new Error(t("git.pushTagFailed", { exitCode, error: stderr.trim() }));
+    }
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.message.includes("killed")) {
+      throw new Error(t("git.pushTagTimeout", { timeout: timeout / 1000 }));
+    }
+    throw error;
   }
 }
 
@@ -109,19 +186,14 @@ async function pushGitTag(tag: string): Promise<void> {
  * 使用 bun pm whoami 检查登录状态
  */
 async function checkNpmAuth(registry: string): Promise<void> {
-  // Bun 的包管理器兼容 npm 命令
-  const proc = Bun.spawn(
-    ["bun", "pm", "whoami"],
-    {
-      stdout: "pipe",
-      stderr: "pipe",
-    }
-  );
+  const proc = Bun.spawn(["bun", "pm", "whoami"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
 
   const exitCode = await proc.exited;
   
   if (exitCode !== 0) {
-    // 获取错误输出
     const stderr = await new Response(proc.stderr).text();
     const errorMsg = stderr.trim();
     
@@ -144,6 +216,7 @@ async function checkNpmAuth(registry: string): Promise<void> {
 
 /**
  * 发布到 npm
+ * 使用 npm publish 命令发布包
  */
 async function publishToNpm(packagePath: string, registry: string, otp?: string): Promise<void> {
   const args = ["bun", "publish", "--registry", registry];
@@ -165,12 +238,19 @@ async function publishToNpm(packagePath: string, registry: string, otp?: string)
 
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
-    return Promise.reject(new Error(t("publish.npmPublishFailed", { exitCode })));
+    throw new Error(t("publish.npmPublishFailed", { exitCode }));
   }
 }
 
 /**
  * 发布包
+ * 新的发布顺序：
+ * 1. 更新版本号和 changelog
+ * 2. 创建 git commit
+ * 3. 推送代码（超时10s）
+ * 4. 创建 git tag
+ * 5. 推送 tag（超时10s）
+ * 6. 发布到 npm
  * 如果发布失败，会自动回滚版本号和 changelog 的修改
  */
 export async function publish(config: PublishConfig): Promise<void> {
@@ -183,32 +263,92 @@ export async function publish(config: PublishConfig): Promise<void> {
 
   try {
     // 1. 更新版本号
-    updatePackageVersion(config.package.path, config.newVersion);
+    const updateVersionSpinner = ora(t("publish.updatingVersion")).start();
+    try {
+      updatePackageVersion(config.package.path, config.newVersion);
+      updateVersionSpinner.succeed(t("publish.versionUpdated"));
+    } catch (error) {
+      updateVersionSpinner.fail(t("publish.versionUpdateFailed"));
+      throw error;
+    }
 
     // 2. 生成 changelog 文件（如果配置了）
     if (config.generateChangelog) {
-      updateChangelog(config.package.path, config.newVersion, config.changelog);
+      const changelogSpinner = ora(t("publish.updatingChangelog")).start();
+      try {
+        updateChangelog(config.package.path, config.newVersion, config.changelog);
+        changelogSpinner.succeed(t("publish.changelogUpdated"));
+      } catch (error) {
+        changelogSpinner.fail(t("publish.changelogUpdateFailed"));
+        throw error;
+      }
     }
 
     // 3. 检查 npm 登录状态
-    await checkNpmAuth(config.registry);
-
-    // 4. 创建 git tag（如果配置了推送 tag）
-    if (config.pushTag) {
-      await createGitTag(config.tag);
-      gitTagCreated = true;
+    const authSpinner = ora(t("publish.checkingNpmAuth")).start();
+    try {
+      await checkNpmAuth(config.registry);
+      authSpinner.succeed(t("publish.npmAuthChecked"));
+    } catch (error) {
+      authSpinner.fail(t("publish.npmAuthCheckFailed"));
+      throw error;
     }
 
-    // 5. 发布到 npm
-    await publishToNpm(config.package.path, config.registry, config.otp);
+    // 4. 创建 git commit
+    const commitSpinner = ora(t("publish.creatingCommit")).start();
+    try {
+      await createGitCommit(config.package.path, config.newVersion, config.changelog);
+      commitSpinner.succeed(t("publish.commitCreated"));
+    } catch (error) {
+      commitSpinner.fail(t("publish.commitFailed"));
+      throw error;
+    }
 
-    // 6. 推送 git tag（如果配置了）
+    // 5. 推送代码到远程仓库（超时10s）
+    const pushCodeSpinner = ora(t("publish.pushingCode")).start();
+    try {
+      await pushGitCode(config.package.path, 10000);
+      pushCodeSpinner.succeed(t("publish.codePushed"));
+    } catch (error) {
+      pushCodeSpinner.fail(t("publish.codePushFailed"));
+      throw error;
+    }
+
+    // 6. 创建 git tag（如果配置了推送 tag）
     if (config.pushTag) {
-      await pushGitTag(config.tag);
+      const tagSpinner = ora(t("publish.creatingTag")).start();
+      try {
+        await createGitTag(config.tag, config.package.path);
+        gitTagCreated = true;
+        tagSpinner.succeed(t("publish.tagCreated"));
+      } catch (error) {
+        tagSpinner.fail(t("publish.tagCreateFailed"));
+        throw error;
+      }
+
+      // 7. 推送 git tag（超时10s）
+      const pushTagSpinner = ora(t("publish.pushingTag")).start();
+      try {
+        await pushGitTag(config.tag, config.package.path, 10000);
+        pushTagSpinner.succeed(t("publish.tagPushed"));
+      } catch (error) {
+        pushTagSpinner.fail(t("publish.tagPushFailed"));
+        throw error;
+      }
+    }
+
+    // 8. 发布到 npm
+    const publishSpinner = ora(t("publish.publishing")).start();
+    try {
+      await publishToNpm(config.package.path, config.registry, config.otp);
+      publishSpinner.succeed(t("publish.success"));
+    } catch (error) {
+      publishSpinner.fail(t("publish.failed"));
+      throw error;
     }
   } catch (error) {
     // 发布失败，回滚修改
-    console.error(t("publish.rollingBack") || "发布失败，正在回滚修改...");
+    const rollbackSpinner = ora(t("publish.rollingBack")).start();
     
     try {
       // 恢复版本号
@@ -221,16 +361,14 @@ export async function publish(config: PublishConfig): Promise<void> {
       
       // 删除已创建的 git tag（如果创建了）
       if (gitTagCreated) {
-        await deleteGitTag(config.tag);
+        await deleteGitTag(config.tag, config.package.path);
       }
       
-      console.error(t("publish.rollbackComplete") || "回滚完成");
+      rollbackSpinner.succeed(t("publish.rollbackComplete"));
     } catch (rollbackError) {
       // 回滚失败，记录错误但不抛出，因为原始错误更重要
-      console.error(
-        t("publish.rollbackFailed") || "回滚失败，请手动恢复版本号和 changelog:",
-        rollbackError
-      );
+      rollbackSpinner.fail(t("publish.rollbackFailed"));
+      console.error(rollbackError);
     }
     
     // 重新抛出原始错误

@@ -27,15 +27,6 @@
 ```bash
 # Using bun
 bun add -g bun-push
-
-# Or using npm
-npm install -g bun-push
-
-# Or using yarn
-yarn global add bun-push
-
-# Or using pnpm
-pnpm add -g bun-push
 ```
 
 ## 🌍 Multi-language Support

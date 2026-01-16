@@ -22,7 +22,7 @@
 - 📝 **Changelog 支持**：发布前记录变更日志，自动生成 CHANGELOG.md 文件
 - 🛠️ **脚本执行**：支持发布前执行构建脚本（如 build）
 - 🎨 **美观的 UI**：带有 loading 动画和成功提示
-- 📚 **JS API**：同时提供程序化 API 供 Node.js 脚本使用
+- 📚 **JS API**：同时提供程序化 API 供 Bun 脚本使用
 - 🌍 **多语言支持**：支持中文、英文、日语、韩语，默认使用中文
 
 ## 📦 安装
@@ -30,15 +30,6 @@
 ```bash
 # 使用 bun
 bun add -g bun-push
-
-# 或使用 npm
-npm install -g bun-push
-
-# 或使用 yarn
-yarn global add bun-push
-
-# 或使用 pnpm
-pnpm add -g bun-push
 ```
 
 ## 🌍 多语言支持
