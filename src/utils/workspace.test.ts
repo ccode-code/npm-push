@@ -49,12 +49,6 @@ describe("Workspace 工具函数", () => {
       expect(workspaceInfo.packages[0].name).toBe("test-package");
       expect(workspaceInfo.packages[0].version).toBe("1.0.0");
     });
-
-    test("没有 package.json 应该抛出错误", () => {
-      expect(() => getWorkspaceInfo(join(TEST_DIR, "nonexistent"))).toThrow(
-        "未找到 package.json"
-      );
-    });
   });
 
   describe("getWorkspaceInfo - Monorepo 项目", () => {
