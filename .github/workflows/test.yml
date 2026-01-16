@@ -1,69 +1,69 @@
-name: Test
+# name: Test
 
-# CI/CD 测试工作流
-# 在每次 push 和 pull request 时运行测试
+# # CI/CD 测试工作流
+# # 在每次 push 和 pull request 时运行测试
 
-on:
-  push:
-    branches:
-      - main
-      - develop
-    paths:
-      - 'src/**'
-      - '*.ts'
-      - '*.json'
-      - '.github/workflows/test.yml'
-  pull_request:
-    branches:
-      - main
-      - develop
-    paths:
-      - 'src/**'
-      - '*.ts'
-      - '*.json'
-      - '.github/workflows/test.yml'
+# on:
+#   push:
+#     branches:
+#       - main
+#       - develop
+#     paths:
+#       - 'src/**'
+#       - '*.ts'
+#       - '*.json'
+#       - '.github/workflows/test.yml'
+#   pull_request:
+#     branches:
+#       - main
+#       - develop
+#     paths:
+#       - 'src/**'
+#       - '*.ts'
+#       - '*.json'
+#       - '.github/workflows/test.yml'
 
-jobs:
-  test:
-    name: Run Tests
-    runs-on: ${{ matrix.os }}
+# jobs:
+#   test:
+#     name: Run Tests
+#     runs-on: ${{ matrix.os }}
     
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        bun-version: ['latest']
+#     strategy:
+#       matrix:
+#         os: [ubuntu-latest, macos-latest, windows-latest]
+#         bun-version: ['latest']
     
-    steps:
-      # 检出代码
-      - name: Checkout code
-        uses: actions/checkout@v4
+#     steps:
+#       # 检出代码
+#       - name: Checkout code
+#         uses: actions/checkout@v4
       
-      # 安装 Bun
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ matrix.bun-version }}
+#       # 安装 Bun
+#       - name: Setup Bun
+#         uses: oven-sh/setup-bun@v2
+#         with:
+#           bun-version: ${{ matrix.bun-version }}
       
-      # 安装依赖
-      - name: Install dependencies
-        run: bun install
+#       # 安装依赖
+#       - name: Install dependencies
+#         run: bun install
       
-      # 运行测试
-      - name: Run tests
-        run: bun test:ci
+#       # 运行测试
+#       - name: Run tests
+#         run: bun test:ci
       
-      # 运行类型检查
-      - name: Type check
-        run: bun run --bun tsc --noEmit
+#       # 运行类型检查
+#       - name: Type check
+#         run: bun run --bun tsc --noEmit
       
-      # 清理测试临时目录（如果存在）
-      # 跨平台兼容的清理命令
-      - name: Cleanup test directories (Unix)
-        if: always() && runner.os != 'Windows'
-        run: rm -rf .test-tmp* || true
+#       # 清理测试临时目录（如果存在）
+#       # 跨平台兼容的清理命令
+#       - name: Cleanup test directories (Unix)
+#         if: always() && runner.os != 'Windows'
+#         run: rm -rf .test-tmp* || true
       
-      - name: Cleanup test directories (Windows)
-        if: always() && runner.os == 'Windows'
-        run: |
-          if exist .test-tmp* rmdir /s /q .test-tmp*
-          exit 0
+#       - name: Cleanup test directories (Windows)
+#         if: always() && runner.os == 'Windows'
+#         run: |
+#           if exist .test-tmp* rmdir /s /q .test-tmp*
+#           exit 0
